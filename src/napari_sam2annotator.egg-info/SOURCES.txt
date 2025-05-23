@@ -1,0 +1,12 @@
+pyproject.toml
+setup.cfg
+src/napari_sam2annotator/__init__.py
+src/napari_sam2annotator/_funcs.py
+src/napari_sam2annotator/_sam2_wrapper.py
+src/napari_sam2annotator/_widget.py
+src/napari_sam2annotator.egg-info/PKG-INFO
+src/napari_sam2annotator.egg-info/SOURCES.txt
+src/napari_sam2annotator.egg-info/dependency_links.txt
+src/napari_sam2annotator.egg-info/entry_points.txt
+src/napari_sam2annotator.egg-info/requires.txt
+src/napari_sam2annotator.egg-info/top_level.txt

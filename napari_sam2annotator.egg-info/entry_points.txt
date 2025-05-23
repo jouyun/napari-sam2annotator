@@ -1,0 +1,2 @@
+[napari.manifest]
+napari-sam2annotator = napari_sam2annotator:napari.yaml

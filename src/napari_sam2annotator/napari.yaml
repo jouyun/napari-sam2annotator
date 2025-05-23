@@ -1,0 +1,10 @@
+name: napari-sam2annotator
+display_name: SAM2 Annotator
+contributions:
+  commands:
+    - id: napari-sam2annotator.make_sam2annotator_widget
+      python_name: napari_sam2annotator._widget:sam2annotatorWidget
+      title: Make SAM2 Annotator
+  widgets:
+    - command: napari-sam2annotator.make_sam2annotator_widget
+      display_name: Visualizer

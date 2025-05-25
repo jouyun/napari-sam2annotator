@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 from typing import Any, Generator, Optional
 
 from magicgui import magic_factory
-from qtpy.QtWidgets import QHBoxLayout, QPushButton, QWidget, QLineEdit, QVBoxLayout, QFrame, QLabel, QFileDialog, QCheckBox
+from qtpy.QtWidgets import QHBoxLayout, QPushButton, QWidget, QLineEdit, QVBoxLayout, QFrame, QLabel, QFileDialog, QCheckBox, QSizePolicy
 import numpy as np
 import skimage.util as util
 import tifffile
@@ -37,25 +37,42 @@ class sam2annotatorWidget(QWidget):
         self.root_directory = ''
 
         self.figure = Figure()
+        def hline():
+            line = QFrame()
+            line.setFrameShape(QFrame.HLine)
+            line.setFrameShadow(QFrame.Sunken)
+            return line
 
         # Create the buttons
         self.zoom_combo = QComboBox()
         for factor in (1, 2, 4, 8, 16):
             self.zoom_combo.addItem(f"{factor}X", userData=factor)  # store numeric value
         self.zoom_combo.setCurrentIndex(0)  # set default to 1X
+        self.file_text = QLineEdit()
+        self.file_text.setReadOnly(True)
 
-        self.folder_btn = QPushButton("folder")
-        self.folder_btn.clicked.connect(self._folder_click)
-        self.open_btn = QPushButton("open")
+        self.open_btn = QPushButton("Choose File")
         self.open_btn.clicked.connect(self._open_click)
+        self.folder_btn = QPushButton("Choose Folder")
+        self.folder_btn.clicked.connect(self._folder_click)
 
-        self.set_btn = QPushButton("set")
+        self.set_btn = QPushButton("Lock-in Channel")
         self.set_btn.clicked.connect(self._set_click)
 
-        self.multibox_check = QCheckBox("Multi Box")
+        self.multibox_check = QCheckBox("Multi")
 
-        self.box_btn = QPushButton("box")
+        self.box_btn = QPushButton("Propagate Box")
         self.box_btn.clicked.connect(self._box_click)
+
+        self.top_btn = QPushButton("Top")
+        self.top_btn.clicked.connect(self._top_click)
+        self.bottom_btn = QPushButton("Bottom")
+        self.bottom_btn.clicked.connect(self._bottom_click)
+        self.add_to_master_btn = QPushButton("Add to Master")
+        self.add_to_master_btn.clicked.connect(self._add_to_master_click)
+
+        self.save_btn = QPushButton("Save")
+        self.save_btn.clicked.connect(self._save_click)
 
 
         # Internal variables
@@ -65,13 +82,45 @@ class sam2annotatorWidget(QWidget):
         self.proccessing_directory = False
         
         # Set layout
-        layout = QVBoxLayout()
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Downsample:"))
         layout.addWidget(self.zoom_combo)
-        layout.addWidget(self.folder_btn)
-        layout.addWidget(self.open_btn)
+
+        row = QHBoxLayout()
+        row.addWidget(self.open_btn)
+        row.addWidget(self.folder_btn)
+        layout.addLayout(row)
+        
+        layout.addWidget(self.file_text)
+
+        layout.addWidget(hline())
+        layout.addWidget(QLabel("Set Channel:"))
+        self.set_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout.addWidget(self.set_btn)
-        layout.addWidget(self.multibox_check)
-        layout.addWidget(self.box_btn)
+        layout.addWidget(hline())
+
+        layout.addWidget(QLabel("Box Annotations:"))
+        grpBox = QHBoxLayout()
+        grpBox.addWidget(self.multibox_check)
+        grpBox.addWidget(self.box_btn)
+        grpBox.addStretch()
+        layout.addLayout(grpBox)        
+        layout.addWidget(hline())
+
+        layout.addWidget(QLabel("Adjust Annotations:"))
+        grpBox = QHBoxLayout()
+        grpVBox = QVBoxLayout()
+        grpVBox.addWidget(self.bottom_btn)
+        grpVBox.addWidget(self.top_btn)
+        grpBox.addLayout(grpVBox)
+        grpBox.addWidget(self.add_to_master_btn)
+        grpBox.addStretch()
+        layout.addLayout(grpBox)
+        layout.addWidget(hline())
+
+        layout.addWidget(QLabel("Save Annotations:"))
+        layout.addWidget(self.save_btn)
+        layout.addWidget(hline())
 
         # Finish the layout
         self.setLayout(layout)
@@ -97,8 +146,8 @@ class sam2annotatorWidget(QWidget):
             if self.file_index >= len(self.fnames):
                 print('No more files to process')
                 return
-            self.file_name = self.fnames[self.file_index]
-            self.open_image(self.file_name)
+            self.file_text.setText(self.fnames[self.file_index])
+            self.open_image(self.file_text.text())
 
     def _open_click(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -108,7 +157,7 @@ class sam2annotatorWidget(QWidget):
         )
         if path:                                   # user didn’t cancel
             self.root_directory = os.path.dirname(path)
-            self.file_name = os.path.basename(path)
+            self.file_text.setText(os.path.basename(path))
             self.open_image(path)
 
     def _set_click(self):
@@ -137,8 +186,37 @@ class sam2annotatorWidget(QWidget):
         else:
             self.viewer.add_labels(mask.astype(int)*3)
         self.clear_boxes()
-
-
+    def _top_click(self):
+        current_slice = self.viewer.dims.current_step[0]
+        current_labels = self.viewer.layers['Labels'].data
+        current_labels[current_slice:] = 0
+        self.viewer.layers['Labels'].data = current_labels
+    def _bottom_click(self):
+        current_slice = self.viewer.dims.current_step[0]
+        current_labels = self.viewer.layers['Labels'].data
+        current_labels[:current_slice] = 0
+        self.viewer.layers['Labels'].data = current_labels
+    def _add_to_master_click(self):
+        current_mask = self.viewer.layers['Labels'].data
+        # Keep only the largest contiguous object
+        current_mask = keep_largest(current_mask)
+        if 'master_labels' in self.viewer.layers:
+            self.viewer.layers['master_labels'].data[current_mask>0] = np.max(self.viewer.layers['master_labels'].data) + 1
+        else:
+            self.viewer.add_labels(current_mask, name='master_labels')
+        self.viewer.layers.selection.active = self.viewer.layers['Box']
+    def _save_click(self):
+        out_data = self.viewer.layers['master_labels'].data
+        out_data = self.upsample_stack_cv2(out_data, self.orig_shape[1], self.orig_shape[2])
+        ski.io.imsave(os.path.join(self.root_directory, self.file_text.text().replace('.tif', '_labels.tiff')), out_data.astype(np.uint16))
+        if self.proccessing_directory:
+            self.file_index += 1
+            self.file_index = self.get_next_undone(self.file_index)
+            if len(self.fnames) > self.file_index:
+                self.file_text.setText(self.fnames[self.file_index])
+                self.viewer.layers.clear()
+                self.open_image(self.file_text.text())
+                self._set_click()
     # Utility functions
     def open_image(self, path):
         downsample = self.zoom_combo.currentIndex()
@@ -189,36 +267,13 @@ class sam2annotatorWidget(QWidget):
         self._box_click()
     
     def _on_a_click(self, _: Optional[Any] = None) -> None:
-        current_mask = self.viewer.layers['Labels'].data
-        # Keep only the largest contiguous object
-        current_mask = keep_largest(current_mask)
-        if 'master_labels' in self.viewer.layers:
-            self.viewer.layers['master_labels'].data[current_mask>0] = np.max(self.viewer.layers['master_labels'].data) + 1
-        else:
-            self.viewer.add_labels(current_mask, name='master_labels')
-        self.viewer.layers.selection.active = self.viewer.layers['Box']
+        self._add_to_master_click()
 
     def _on_t_click(self, _: Optional[Any] = None) -> None:
-        current_slice = self.viewer.dims.current_step[0]
-        current_labels = self.viewer.layers['Labels'].data
-        current_labels[current_slice:] = 0
-        self.viewer.layers['Labels'].data = current_labels
+        self._top_click()
     
     def _on_b_click(self, _: Optional[Any] = None) -> None:
-        current_slice = self.viewer.dims.current_step[0]
-        current_labels = self.viewer.layers['Labels'].data
-        current_labels[:current_slice] = 0
-        self.viewer.layers['Labels'].data = current_labels
+        self._bottom_click()
 
     def _on_d_click(self, _: Optional[Any] = None) -> None:
-        out_data = self.viewer.layers['master_labels'].data
-        out_data = self.upsample_stack_cv2(out_data, self.orig_shape[1], self.orig_shape[2])
-        ski.io.imsave(os.path.join(self.root_directory, self.file_name.replace('.tif', '_labels.tiff')), out_data.astype(np.uint16))
-        if self.proccessing_directory:
-            self.file_index += 1
-            self.file_index = self.get_next_undone(self.file_index)
-            if len(self.fnames) > self.file_index:
-                self.file_name = self.fnames[self.file_index]
-                self.viewer.layers.clear()
-                self.open_image(self.file_name)
-                self._set_click()
+        self._save_click()

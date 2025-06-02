@@ -57,11 +57,13 @@ class sam2annotatorWidget(QWidget):
         self.folder_btn.clicked.connect(self._folder_click)
 
         self.set_btn = QPushButton("Lock-in Channel")
+        self.set_btn.setEnabled(False)  # Initially disabled until an image is loaded
         self.set_btn.clicked.connect(self._set_click)
 
         self.multibox_check = QCheckBox("Multi")
 
         self.box_btn = QPushButton("Propagate Box")
+        self.box_btn.setEnabled(False)
         self.box_btn.clicked.connect(self._box_click)
 
         self.top_btn = QPushButton("Top")
@@ -70,8 +72,10 @@ class sam2annotatorWidget(QWidget):
         self.bottom_btn.clicked.connect(self._bottom_click)
         self.add_to_master_btn = QPushButton("Add to Master")
         self.add_to_master_btn.clicked.connect(self._add_to_master_click)
+        self.adjust_annotation_buttons_state(False)
 
         self.save_btn = QPushButton("Save")
+        self.save_btn.setEnabled(False)  # Initially disabled until an image is loaded
         self.save_btn.clicked.connect(self._save_click)
 
 
@@ -79,7 +83,7 @@ class sam2annotatorWidget(QWidget):
         self.fnames = []
         self.file_index = 0
         self.base_layer = None
-        self.proccessing_directory = False
+        self.processing_directory = False
         
         # Set layout
         layout = QVBoxLayout(self)
@@ -138,7 +142,7 @@ class sam2annotatorWidget(QWidget):
             caption="Select folder",
         )
         if path:                                   # user didn’t cancel
-            self.proccessing_directory = True
+            self.processing_directory = True
             self.root_directory = path
             self.fnames = glob.glob(os.path.join(path, '*.tif'))
             self.fnames.sort()
@@ -148,6 +152,7 @@ class sam2annotatorWidget(QWidget):
                 return
             self.file_text.setText(self.fnames[self.file_index])
             self.open_image(self.file_text.text())
+            self.set_btn.setEnabled(True)
 
     def _open_click(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -159,6 +164,7 @@ class sam2annotatorWidget(QWidget):
             self.root_directory = os.path.dirname(path)
             self.file_text.setText(os.path.basename(path))
             self.open_image(path)
+            self.set_btn.setEnabled(True)
 
     def _set_click(self):
         if self.base_layer is None:
@@ -174,6 +180,10 @@ class sam2annotatorWidget(QWidget):
             self.annotated_img = self.viewer.layers[self.base_layer].data
         self.sam.set_image(self.annotated_img)
         self.clear_boxes()
+        for layer in self.viewer.layers[:-1]:
+            layer.visible = False
+        self.viewer.layers[self.base_layer].visible = True
+        self.box_btn.setEnabled(True)
     
     def _box_click(self):
         shapes = self.viewer.layers['Box'].data[1:]
@@ -186,6 +196,7 @@ class sam2annotatorWidget(QWidget):
         else:
             self.viewer.add_labels(mask.astype(int)*3)
         self.clear_boxes()
+        self.adjust_annotation_buttons_state(True)
     def _top_click(self):
         current_slice = self.viewer.dims.current_step[0]
         current_labels = self.viewer.layers['Labels'].data
@@ -205,11 +216,13 @@ class sam2annotatorWidget(QWidget):
         else:
             self.viewer.add_labels(current_mask, name='master_labels')
         self.viewer.layers.selection.active = self.viewer.layers['Box']
+        self.adjust_annotation_buttons_state(False)
+        self.save_btn.setEnabled(True)
     def _save_click(self):
         out_data = self.viewer.layers['master_labels'].data
         out_data = self.upsample_stack_cv2(out_data, self.orig_shape[1], self.orig_shape[2])
         ski.io.imsave(os.path.join(self.root_directory, self.file_text.text().replace('.tif', '_labels.tiff')), out_data.astype(np.uint16))
-        if self.proccessing_directory:
+        if self.processing_directory:
             self.file_index += 1
             self.file_index = self.get_next_undone(self.file_index)
             if len(self.fnames) > self.file_index:
@@ -217,6 +230,12 @@ class sam2annotatorWidget(QWidget):
                 self.viewer.layers.clear()
                 self.open_image(self.file_text.text())
                 self._set_click()
+        self.save_btn.setEnabled(False)
+    def adjust_annotation_buttons_state(self, state):
+        """Enable or disable the annotation buttons based on the state."""
+        self.top_btn.setEnabled(state)
+        self.bottom_btn.setEnabled(state)
+        self.add_to_master_btn.setEnabled(state)
     # Utility functions
     def open_image(self, path):
         downsample = self.zoom_combo.currentIndex()

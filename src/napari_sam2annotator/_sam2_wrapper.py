@@ -7,11 +7,11 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import glob
 from sam2.build_sam import build_sam2_video_predictor
-from napari_sam2annotator._funcs import delete_tmp_files, convert_to_rgb, cleanup_mask, is_legit_shape
+from ._funcs import delete_tmp_files, convert_to_rgb, cleanup_mask, is_legit_shape
 
 
 class sam2_wrapper:
-    def __init__(self, model_path='U:/smc/public/SMC/sam2/checkpoints/sam2_hiera_base_plus.pt'):
+    def __init__(self, model_path='U:/smc/public/SMC/sam2/checkpoints/sam2_hiera_base_plus.pt', updated=True):
         """
         Initialize the SAM2 wrapper.
 
@@ -32,6 +32,9 @@ class sam2_wrapper:
                 torch.backends.cuda.matmul.allow_tf32 = True
                 torch.backends.cudnn.allow_tf32 = True
 
+        if updated:
+            sam2_checkpoint = 'U:/smc/public/SMC/sam2.1/sam2/checkpoints/sam2.1_hiera_large.pt'
+            model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
         self.predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint, device=device)
 
 
